@@ -310,7 +310,6 @@ parseBlock (Elem e) =
                                                 Just ws' -> let tot = sum ws'
                                                             in  ColWidth . (/ tot) <$> ws'
                                                 Nothing  -> replicate numrows ColWidthDefault
-
                       let parseCell = parseMixed plain . elContent
                       let elementToCell element = cell
                             (toAlignment element)
