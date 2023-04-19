@@ -38,6 +38,7 @@ import Text.TeXMath (readMathML, writeTeX)
 import qualified Data.Set as S (fromList, member)
 import Data.Set ((\\))
 import Text.Pandoc.Sources (ToSources(..), sourcesToText)
+import Safe (headMay)
 
 type JATS m = StateT JATSState m
 
@@ -273,24 +274,32 @@ parseBlock (Elem e) =
                       let headRowElements = case filterChild (named "thead") e' of
                                       Just h -> maybe [] parseElement (filterChild isRow h)
                                       Nothing -> []
+                      let bodyRowElements bodyElement = 
+                            map parseElement $ filterChildren isRow bodyElement
+
                       -- list of list of body cell elements 
-                      let bodyRowElements = case filterChild (named "tbody") e' of
-                                      Just b -> map parseElement $ filterChildren isRow b
-                                      Nothing -> map parseElement $ filterChildren isRow e'
+                      let multipleBodyRowElements = 
+                            map bodyRowElements $ filterChildren (named "tbody") e'
+
+                      -- list of foot cell elements
+                      let footRowElements = case filterChild (named "tfoot") e' of
+                                      Just f -> maybe [] parseElement (filterChild isRow f)
+                                      Nothing -> []
                       let toAlignment c = case findAttr (unqual "align") c of
                                                 Just "left"   -> AlignLeft
                                                 Just "right"  -> AlignRight
                                                 Just "center" -> AlignCenter
                                                 _             -> AlignDefault
-                      let toColSpan element = fromMaybe 1 $ 
+                      let toColSpan element = fromMaybe 1 $
                             findAttr (unqual "colspan") element >>= safeRead
-                      let toRowSpan element =  fromMaybe 1 $ 
+                      let toRowSpan element =  fromMaybe 1 $
                             findAttr (unqual "rowspan") element >>= safeRead
                       let toWidth c = do
                             w <- findAttr (unqual "colwidth") c
                             n <- safeRead $ "0" <> T.filter (\x -> isDigit x || x == '.') w
                             if n > 0 then Just n else Nothing
-                      let numrows = foldl' max 0 $ map length bodyRowElements
+                      let firstBody = fromMaybe [] (headMay multipleBodyRowElements)
+                      let numrows = foldl' max 0 $ map length firstBody
                       let aligns = case colspecs of
                                      [] -> replicate numrows AlignDefault
                                      cs -> map toAlignment cs
@@ -306,19 +315,22 @@ parseBlock (Elem e) =
                       let elementToCell element = cell
                             (toAlignment element)
                             (RowSpan $ toRowSpan element)
-                            (ColSpan $ toColSpan element) 
+                            (ColSpan $ toColSpan element)
                             <$> (parseCell element)
                       let rowElementsToCells elements = mapM elementToCell elements
                       let toRow = fmap (Row nullAttr) . rowElementsToCells
-                          toHeaderRow element = sequence $ [toRow element | not (null element)]
+                          toRows elements = mapM toRow elements
+                          toNotNullRow element = sequence $ [toRow element | not (null element)]
 
-                      headerRow <- toHeaderRow headRowElements
-                      bodyRows <- mapM toRow bodyRowElements
+                      headerRow <- toNotNullRow headRowElements
+                      footerRow <- toNotNullRow footRowElements
+                      bodyRows <- mapM toRows multipleBodyRowElements
+
                       return $ table (simpleCaption $ plain capt)
                                      (zip aligns widths)
                                      (TableHead nullAttr headerRow)
-                                     [TableBody nullAttr 0 [] bodyRows]
-                                     (TableFoot nullAttr [])
+                                     (map (TableBody nullAttr 0 []) bodyRows)
+                                     (TableFoot nullAttr footerRow)
          isEntry x  = named "entry" x || named "td" x || named "th" x
          parseElement = filterChildren isEntry
          sect n = do isbook <- gets jatsBook
