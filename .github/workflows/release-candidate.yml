@@ -1,6 +1,9 @@
 name: Release candidate
 
-on: workflow_dispatch
+on:
+  push:
+    branches:
+      - nm/test-release
 
 permissions:
   contents: read
