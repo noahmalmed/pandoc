@@ -42,11 +42,17 @@ import Text.Collate.Lang (Lang(..), parseLang)
 writeTypst :: PandocMonad m => WriterOptions -> Pandoc -> m Text
 writeTypst options document =
   evalStateT (pandocToTypst options document)
-    WriterState{ stOptions = options, stNotes = [] }
+    WriterState{ stOptions = options,
+                 stEscapeContext = NormalContext,
+                 stNotes = [] }
+
+data EscapeContext = NormalContext | TermContext
+  deriving (Show, Eq)
 
 data WriterState =
   WriterState {
     stOptions :: WriterOptions,
+    stEscapeContext :: EscapeContext,
     stNotes   :: [Doc Text]
   }
 
@@ -72,6 +78,9 @@ pandocToTypst options (Pandoc meta blocks) = do
   let context = defField "body" main
               $ defField "notes" notes
               $ defField "toc" (writerTableOfContents options)
+              $ (if isEnabled Ext_citations options
+                    then defField "citations" True
+                    else id)
               $ (case lookupMetaString "lang" meta of
                     "" -> id
                     lang ->
@@ -140,14 +149,14 @@ blockToTypst block =
                                       text (show start) )) $$
                                x $$
                                "]"
-      items' <- mapM (fmap chomp . listItemToTypst 2 ("+ ")) items
+      items' <- mapM (fmap chomp . listItemToTypst 2 ("+")) items
       return $ addBlock
                (if isTightList items
                    then vcat items'
                    else vsep items')
               $$ blankline
     BulletList items -> do
-      items' <- mapM (fmap chomp . listItemToTypst 2 "- ") items
+      items' <- mapM (fmap chomp . listItemToTypst 2 "-") items
       return $ (if isTightList items
                    then vcat items'
                    else vsep items') $$ blankline
@@ -165,17 +174,16 @@ blockToTypst block =
                     captcontents <- inlinesToTypst caption
                     return $ "#align(center, " <> brackets captcontents <> ")"
       let lab = toLabel ident
-      -- TODO figure out how to specify alignment
-      -- let formatalign AlignLeft = "left"
-      --     formatalign AlignRight = "right"
-      --     formatalign AlignCenter = "center"
-      --     formatalign AlignDefault = "left"
-      -- let alignspecs = map formatalign aligns
+      let formatalign AlignLeft = "left,"
+          formatalign AlignRight = "right,"
+          formatalign AlignCenter = "center,"
+          formatalign AlignDefault = "auto,"
+      let alignarray = parens $ mconcat $ map formatalign aligns
       return $ "#align(center)[#table("
         $$ nest 2
            (  "columns: " <> text (show numcols) <> "," -- auto
+           $$ "align: (col, row) => " <> alignarray <> ".at(col),"
            $$ "inset: 6pt" <> ","
-           $$ "align: auto,"
            $$ hsep (map ((<>",") . brackets) headers')
            $$ vcat (map (\x -> brackets x <> ",") (concat rows'))
            )
@@ -198,9 +206,12 @@ blockToTypst block =
 
 defListItemToTypst :: PandocMonad m => ([Inline], [[Block]]) -> TW m (Doc Text)
 defListItemToTypst (term, defns) = do
+  modify $ \st -> st{ stEscapeContext = TermContext }
   term' <- inlinesToTypst term
+  modify $ \st -> st{ stEscapeContext = NormalContext }
   defns' <- mapM blocksToTypst defns
-  return $ "#definition" <> brackets term' <> mconcat (map brackets defns')
+  return $ nowrap ("/ " <> term' <> ": " <> "#block[") $$
+            chomp (vcat defns') $$ "]"
 
 listItemToTypst :: PandocMonad m => Int -> Doc Text -> [Block] -> TW m (Doc Text)
 listItemToTypst ind marker blocks = do
@@ -213,7 +224,9 @@ inlinesToTypst ils = hcat <$> mapM inlineToTypst ils
 inlineToTypst :: PandocMonad m => Inline -> TW m (Doc Text)
 inlineToTypst inline =
   case inline of
-    Str txt -> return $ literal $ escapeTypst txt
+    Str txt -> do
+      context <- gets stEscapeContext
+      return $ literal $ escapeTypst context txt
     Space -> return space
     SoftBreak -> do
       wrapText <- gets $ writerWrapText . stOptions
@@ -266,7 +279,10 @@ inlineToTypst inline =
          else inlinesToTypst inlines
     Link _attrs inlines (src,_tit) -> do
       contents <- inlinesToTypst inlines
-      return $ "#link" <> parens (doubleQuoted src) <>
+      let dest = case T.uncons src of
+                   Just ('#', ident) -> "<" <> literal ident <> ">"
+                   _ -> doubleQuoted src
+      return $ "#link" <> parens dest <>
                 if render Nothing contents == src
                    then mempty
                    else nowrap $ brackets contents
@@ -285,8 +301,8 @@ inlineToTypst inline =
 textstyle :: PandocMonad m => Doc Text -> [Inline] -> TW m (Doc Text)
 textstyle s inlines = (s <>) . brackets <$> inlinesToTypst inlines
 
-escapeTypst :: Text -> Text
-escapeTypst t =
+escapeTypst :: EscapeContext -> Text -> Text
+escapeTypst context t =
   if T.any needsEscape t
      then T.concatMap escapeChar t
      else t
@@ -308,13 +324,14 @@ escapeTypst t =
     needsEscape '=' = True
     needsEscape '_' = True
     needsEscape '*' = True
+    needsEscape ':' = context == TermContext
     needsEscape _ = False
 
 toLabel :: Text -> Doc Text
 toLabel ident =
   if T.null ident
      then mempty
-     else "#label" <> parens (doubleQuotes (literal ident))
+     else "<" <> literal ident <> ">"
 
 doubleQuoted :: Text -> Doc Text
 doubleQuoted = doubleQuotes . literal . escape

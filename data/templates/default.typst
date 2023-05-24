@@ -1,5 +1,14 @@
 $definitions.typst()$
 
+#show terms: it => {
+  it.children
+    .map(child => [
+      #strong[#child.term]
+      #block(inset: (left: 1.5em, top: -0.4em))[#child.description]
+      ])
+    .join()
+}
+
 $if(template)$
 #import "$template$": conf
 $else$
@@ -83,6 +92,7 @@ $if(notes)$
 $notes$
 ]
 $endif$
+$if(citations)$
 $if(bibliographystyle)$
 
 #set bibliography(style: "$bibliographystyle$")
@@ -91,6 +101,7 @@ $for(bibliography)$
 
 #bibliography("$bibliography$")
 $endfor$
+$endif$
 $for(include-after)$
 
 $include-after$

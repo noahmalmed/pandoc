@@ -33,7 +33,6 @@ extra-deps:
 - lpeg-1.0.4
 - mime-types-0.1.1.0
 - doctemplates-0.11
-- texmath-0.12.7
 - citeproc-0.8.1
 - pandoc-types-1.23
 - pandoc-lua-marshal-0.2.2
@@ -46,6 +45,8 @@ extra-deps:
 - zip-archive-0.4.3
 - commonmark-extensions-0.2.3.4
 - doclayout-0.4.0.1
+- git: https://github.com/jgm/texmath
+  commit: 5b337e57b80831b624f52dd250ab5d612ee94b88
 
 ghc-options:
    "$locals": -fhide-source-paths -Wno-missing-home-modules

@@ -1,5 +1,4 @@
-ARCHITECTURE=$(uname -m)
-
+ARCHITECTURE=$(shell cat architecture.txt)
 VERSION=$(shell cat version.txt)
 BASE=pandoc-$(VERSION)-$(ARCHITECTURE)
 DEST=pandoc/usr/local

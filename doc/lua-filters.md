@@ -1801,7 +1801,7 @@ Fields:
 List of [Inline] elements, with the same methods as a generic
 [List](#type-list). It is usually not necessary to create values
 of this type in user scripts, as pandoc can convert other types
-into Blocks wherever a value of this type is expected:
+into Inlines wherever a value of this type is expected:
 
 -   lists of [Inline] (or Inline-like) values are used directly;
 -   single [Inline] values are converted into a list containing
@@ -2681,7 +2681,7 @@ Parameters:
 
 Returns: [Div] object
 
-### `Figure (content[, caption[, attr]])` {#pandoc.div}
+### `Figure (content[, caption[, attr]])` {#pandoc.figure}
 
 Creates a [Figure][] element.
 
@@ -5663,8 +5663,8 @@ Returns
 
 `render (doc[, colwidth])`
 
-Render a @\'Doc\'@. The text is reflowed on breakable spacesto
-match the given line length. Text is not reflowed if theline
+Render a @\'Doc\'@. The text is reflowed on breakable spaces to
+match the given line length. Text is not reflowed if the line
 length parameter is omitted or nil.
 
 Parameters
